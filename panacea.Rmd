@@ -1,0 +1,42 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+require(knitr)
+# include this code chunk as-is to set options
+opts_chunk$set(comment = NA, prompt = TRUE, tidy = FALSE, 
+               fig.width = 7, fig.height = 7,echo = TRUE, 
+               message = FALSE, warning = FALSE, cache=FALSE)
+Sys.setlocale("LC_TIME", "C")
+```
+
+```{r paquetes, include=FALSE}
+if(!(require(faraway))) install.packages("faraway")
+if(!(require(devtools))) install.packages("devtools")
+if(!(require(cars))) install.packages("cars")
+if(!(require(ggplot2))) install.packages("ggplot2")
+if(!(require(printr))) {
+  install.packages(
+    'printr',
+    type = 'source',
+    repos = c('http://yihui.name/xran', 'http://cran.rstudio.com')
+  )
+}
+```
+
+```{r load data}
+bdpanacea_reduced <- read.table("Z:/Rstudio/EPIC/bdpanacea_reduced.txt", quote="\"", comment.char="")
+EPIC.PANACEA_log2_factors <- read.table("Z:/Rstudio/EPIC/EPIC.PANACEA_log2_factors.txt", quote="\"", comment.char="")
+
+```
+
+```{r}
+Mod1 <- lm( Weight_change_5y ~ pp025 + Age_Recr + Sex_f + Centre_f, EPIC.PANACEA_log2_factors)
+summary(Mod1)
+```
+
