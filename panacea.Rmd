@@ -1,13 +1,17 @@
 ---
-title: "R Notebook"
+title: "Panacea"
 output:
   html_document:
     df_print: paged
   word_document: default
+  
+
 ---
 
 ```{r setup, include=FALSE}
 require(knitr)
+#rmarkdown::render("panacea.Rmd", params = "ask")
+
 # include this code chunk as-is to set options
 opts_chunk$set(comment = NA, prompt = TRUE, tidy = FALSE, 
                fig.width = 7, fig.height = 7,echo = TRUE, 
@@ -18,8 +22,12 @@ Sys.setlocale("LC_TIME", "C")
 ```{r paquetes, include=FALSE}
 if(!(require(faraway))) install.packages("faraway")
 if(!(require(devtools))) install.packages("devtools")
-if(!(require(cars))) install.packages("cars")
+if(!(require(lmerTest))) install.packages("lmerTest")
 if(!(require(ggplot2))) install.packages("ggplot2")
+if(!(require(ggpubr)))install.packages("ggpubr")
+if(!(require(grid)))install.packages("grid")
+if(!(require(gtable)))install.packages("gtable")
+ 
 if(!(require(printr))) {
   install.packages(
     'printr',
@@ -29,14 +37,59 @@ if(!(require(printr))) {
 }
 ```
 
-```{r load data}
-bdpanacea_reduced <- read.table("Z:/Rstudio/EPIC/bdpanacea_reduced.txt", quote="\"", comment.char="")
-EPIC.PANACEA_log2_factors <- read.table("Z:/Rstudio/EPIC/EPIC.PANACEA_log2_factors.txt", quote="\"", comment.char="")
+```{r load data ,cache=TRUE}
+#First save current working directory:
+cwd <- getwd()
+#Load Datasets folder:
+datasets <- paste(cwd,"Datasets/",sep="/")
 
+#Load each file:
+
+file1 <- "bdpanacea_reduced.txt"
+file2 <- "EPIC.PANACEA_log2_factors.txt"
+
+
+
+#reduced <- read.table("Z:/Rstudio/EPIC/bdpanacea_reduced.txt", quote="\"", comment.char="")
+if(!exists("datos")){
+  datos <- read.table(paste0(datasets,file2), quote="\"", comment.char="")
+}
 ```
 
 ```{r}
-Mod1 <- lm( Weight_change_5y ~ pp025 + Age_Recr + Sex_f + Centre_f, EPIC.PANACEA_log2_factors)
+boxplot(datos$Weight_change_5y)
+```
+```{r}
+Mod1 <- lm( Weight_change_5y ~ pp025 + Age_Recr + Sex_f + Centre_f,data = datos)
 summary(Mod1)
+```
+
+```{r}
+#png(filename="plot.png", width=600, height=600)
+
+#region_plot <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point() + facet_grid(rows=vars(Centre_f),cols=vars(Sex_f),scales="free") + geom_smooth(method="lm")
+
+region_plot <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point() + facet_wrap(~Centre_f) + geom_smooth(method="lm",colour="black")
+
+region_plot
+#gt= ggplot_gtable(ggplot_build(region_plot))
+#gt$widths[5] = 4 * gt$widths[5]
+#gt$widths
+#gt$heights = gt$heights*10
+
+#gtable_show_layout(gt)
+#gt$widths[5] = 10*gt$widths[5]
+#grid.draw(gt)
+#dev.off()
+```
+
+
+
+
+
+
+
+```{r}
+#influencePlot(Mod1)
 ```
 
