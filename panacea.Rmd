@@ -1,10 +1,42 @@
 ---
-title: "Panacea"
+title: "Dietary polyphenol and obesity markers. Translational research"
+author: "Izar de Villasante, Brainvitge"
+date: '`r format(Sys.Date(),"%e de %B, %Y")`'
+#runtime: shiny
 output:
   html_document:
     df_print: paged
-  word_document: default
+    toc: yes
+    toc_depth: 3
+  word_document:
+    toc: yes
+    toc_depth: '3'
+  pdf_document:
+    keep_tex: yes
+    toc: yes
+    toc_depth: 3
+params:
   
+  
+  
+  
+  main_folder: !r getwd()
+  #/home/izar/notebooks/
+  
+  men_color: "aquamarine"  #hcl(h=60,c=100,l=65) 
+  women_color: "indianred1"      #hcl(h=15,c=100,l=65) #"#ED813E" # 
+  results: ./Results
+  Datasets: ./Datasets
+  mercedes: "EPIC.PANACEA_log2_factors" 
+  excel_local: "Local_Measures.xlsx"
+  variables: [vol]
+    
+header-includes: 
+  - \usepackage{bbm}
+  - \usepackage[spanish]{babel}
+---
+\newline
+\newline
 
 ---
 
@@ -14,7 +46,7 @@ require(knitr)
 
 # include this code chunk as-is to set options
 opts_chunk$set(comment = NA, prompt = TRUE, tidy = FALSE, 
-               fig.width = 7, fig.height = 7,echo = TRUE, 
+               fig.width = 10, fig.height = 10,echo = TRUE, 
                message = FALSE, warning = FALSE, cache=FALSE)
 Sys.setlocale("LC_TIME", "C")
 ```
@@ -37,7 +69,14 @@ if(!(require(printr))) {
 }
 ```
 
-```{r load data ,cache=TRUE}
+# Contexto del Proyecto:
+
+El objetivo principal del estudio es evaluar la asociación entre la exposición de polifenoles y los marcadores de obesidad e investigar su efecto sobre los parámetros de salud y la pérdida ponderal en un tratamiento de adelgazamiento. El proyecto consta de tres fases: i) evaluación de la exposición de polifenoles, medidos mediante cuestionarios de dieta, biomarcadores o la combinación de ambas medidas, y el cambio de peso y perímetro de cintura en un gran estudio epidemiológico observacional: EPIC-PANACEA, que incluye ~370000 adultos provenientes de 10 países europeos, con un seguimiento de 2 a 11 años.
+
+*The main objective is to evaluate the association between polyphenol exposure and obesity markers and to investigate their effect on several health markers and the body weight composition in a weight loss treatment. The Project is divided in 3 stages: i) Firstly, to evaluate the association between the exposure of polyphenols, assessed using dietary questionnaires, biomarkers or the combination of both methods, and the change in body weight and waist circumference in a large observational study: the EPIC-PANACEA. It consists in ~370000 adult men and women from ten European countries with a follow-up ranged from 2 to 11 years.*
+
+
+```{r load data ,cache=False}
 #First save current working directory:
 cwd <- getwd()
 #Load Datasets folder:
@@ -57,19 +96,59 @@ if(!exists("datos")){
 ```
 
 ```{r}
+str(datos)
+```
+```{r}
+datos[12:21]<-lapply(datos[12:21],function(x) {as.factor(x)})
+levels(datos$Sex_f)<-c("Male","Female")
+str(datos)
+```
+
+
+```{r}
+str(datos$Sex_f)
+
+```
+
+
+
+
+# Data Visualization
+To take a first glance to our data, the first step is to generate some plots:
+
+## Boxplot: 
+
+```{r}
 boxplot(datos$Weight_change_5y)
 ```
-```{r}
-Mod1 <- lm( Weight_change_5y ~ pp025 + Age_Recr + Sex_f + Centre_f,data = datos)
-summary(Mod1)
-```
 
-```{r}
+
+
+Because of the nature of the project, some undesired external variability may be introduced to the data.
+Therefore the variables Sex, Age and centre will be treated as covariates in our model in order to improve accuracy.
+Since each centre collected data in a singular way, some centre-specific variance may be introduced to our data. 
+In order asses this effect, the three following models with different degree of interaction are proposed:
+
+-Model1: Simple regression model with (Age, Sex and centre) as confounding variables. This model doesn't consider within-group variance in the centre variable. 
+
+-Model2: Multilevel mixed model with different intercepts for each centre  +Age +Sex. This model takes into account within-group variance in the centre variable, in the following way:
+Imagine that the scale each centre uses to measure weights is biased. This would result in slightly different measures for each centre either higher than they should be or lower. Therefore, although the mean value (Intercept) may move, the relation between weight gain/loss and polifenol intake (Slope) should stay the same.  
+
+-Model3: Multilevel mixed model with random effect for centre + Age + Sex. This model proposes that the relation between 5 year weight change and total polifenol intake may change between centers. Remind that we are talking about **TOTAL polifenol**, which is a composition of different groups of polifenols. The relation of each group of polifenols inside the class may vary from centre to centre, since the diet changes from one place to another. Thus, its effect on weight change. 
+
+In first place, lets take a look to our data:
+
+
+
+
+a scatter plot of 5y weight change vs total intake of polifeol wi 
+
+```{r, fig.width=7,fig.height=70}
 #png(filename="plot.png", width=600, height=600)
 
-#region_plot <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point() + facet_grid(rows=vars(Centre_f),cols=vars(Sex_f),scales="free") + geom_smooth(method="lm")
+region_plot <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point(size=0.2) + facet_grid(rows=vars(Centre_f),cols=vars(Sex_f),scales="free") + geom_smooth(method="lm",colour="black")
 
-region_plot <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point() + facet_wrap(~Centre_f) + geom_smooth(method="lm",colour="black")
+#region_plot <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point() + facet_wrap(~Centre_f) + geom_smooth(method="lm",colour="black")
 
 region_plot
 #gt= ggplot_gtable(ggplot_build(region_plot))
@@ -86,6 +165,16 @@ region_plot
 
 
 
+If we want to add the diffrent regression lines of the 3 different models to our multiplot we must first calculate and store these lines and their CI.
+
+1.
+
+
+```{r, fig.width=7,fig.height=70}
+region_plot <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point(size=0.2) + facet_grid(rows=vars(Centre_f),cols=vars(Sex_f),scales="free") + geom_abline(aes(data.frame(coef$Mod1)))
+
+region_plot
+```
 
 
 
