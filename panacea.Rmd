@@ -42,12 +42,12 @@ header-includes:
 
 ```{r setup, include=FALSE}
 require(knitr)
-#rmarkdown::render("panacea.Rmd", params = "ask")
+#rmarkdown::render("panacea.Rmd", params = "ask")  #Use in case you want to manually select the file to load data from.
 
 # include this code chunk as-is to set options
 opts_chunk$set(comment = NA, prompt = TRUE, tidy = FALSE, 
                fig.width = 10, fig.height = 10,echo = TRUE, 
-               message = FALSE, warning = FALSE, cache=FALSE)
+               message = FALSE, warning = FALSE, cache=TRUE)
 Sys.setlocale("LC_TIME", "C")
 ```
 
@@ -76,7 +76,11 @@ El objetivo principal del estudio es evaluar la asociación entre la exposición
 *The main objective is to evaluate the association between polyphenol exposure and obesity markers and to investigate their effect on several health markers and the body weight composition in a weight loss treatment. The Project is divided in 3 stages: i) Firstly, to evaluate the association between the exposure of polyphenols, assessed using dietary questionnaires, biomarkers or the combination of both methods, and the change in body weight and waist circumference in a large observational study: the EPIC-PANACEA. It consists in ~370000 adult men and women from ten European countries with a follow-up ranged from 2 to 11 years.*
 
 
-```{r load data ,cache=False}
+**¡¡¡¡Important note: Only 9 countries participate, after Greece quitting the project, the data we will use comes from a curated dataset provided by Mercedes Gil Lespinard with some modifications. The most relevant being the addition of the variable containing the total amount of polifenol which is log2 transformed to remove outliers. We will use this variable along the report !!!!**
+
+
+
+```{r load data }
 #First save current working directory:
 cwd <- getwd()
 #Load Datasets folder:
@@ -96,16 +100,32 @@ if(!exists("datos")){
 ```
 
 ```{r}
-str(datos)
+str(datos, list.len=30)
 ```
 ```{r}
 datos[12:21]<-lapply(datos[12:21],function(x) {as.factor(x)})
-levels(datos$Sex_f)<-c("Male","Female")
-str(datos)
+str(datos, list.len=30)
 ```
 
 
+
+# Data Visualization
+To take a first glance to our data, the first step is to generate some plots:
+
+## Confounding variables
+
+Technical and biological annotations are often interrelated, leading to confounding.
+Because of the nature of the project, some variables were covaried along with polifenol intake in order to diminish the effect of external variability to our model.
+The variables Sex, Age and centre are proposed as confounding variables in our model and they will be covariated in order to improve accuracy.
+Since each centre collected data in a singular way, some centre-specific variance may be introduced to our data. 
+
+## Sex:
+So let's start looking at the variable *"Sex_f"*.
+
+In this case, we will treat biological sex as a binary variable with the values Male/Female 
+
 ```{r}
+levels(datos$Sex_f)<-c("Male","Female")
 str(datos$Sex_f)
 
 ```
@@ -113,25 +133,90 @@ str(datos$Sex_f)
 
 
 
-# Data Visualization
-To take a first glance to our data, the first step is to generate some plots:
-
-## Boxplot: 
 
 ```{r}
-boxplot(datos$Weight_change_5y)
+t_sex<-table(datos$Centre_f,datos$Sex_f)
+t_sex <- cbind(t_sex, Total = rowSums(t_sex))   #Afegim columna de totals a la dreta
+t_sex <- rbind(t_sex, Total = colSums(t_sex))   #Afegim fila de totals a sota.
+t_sex
+
+# No volem agafar la última dada corresponent al total per fer el calcul de mitja, mínim, màxim i desviació estandard.
+# Per accedir a la ultima posició podem fer (nrow(t_sex))
+# Per eliminar aquesta observació afegim un - devant.
+# Totes les dades excepte la última fila    -->    t_sex[-nrow(tsex,)]
+
+paste("Average amount of participants per centre: ",as.integer(mean(t_sex[-nrow(t_sex),3])))
+paste("centre with greatest amount of participants: ", max(t_sex[-nrow(t_sex),3]))
+paste("centre with fewest amount of participants: ", min(t_sex[-nrow(t_sex),3]))
+paste("Standard deviation: ", sd(t_sex[-27,3]))
+
+
+#which(t_sex[,3]==min(t_sex[,3])) #Gives the name of the Centre
+
+
+```
+There are huge differences between the number of participants from each centre. This reinforces discrimination by centre to avoid the effect of the different weights of centre-specific errors. In other words, centres with a lot of participants would impact in a bigger manner than centres with fewer participants . 
+
+```{r}
+
+# Simple Pie Chart
+slices <- c(sum(t_sex[,1]>0),sum(t_sex[,1]==0),sum(t_sex[,2]==0))
+lbls <- c("Men + Women", "Only Women", "Only Men")
+pct <- round(slices/sum(slices)*100)
+lbls <- paste(lbls, pct) # add percents to labels
+lbls <- paste(lbls,"%",sep="") # ad % to labels
+
+pie(slices, labels = lbls, col=rainbow(length(lbls)),main="Pie Chart of sex representation of each centre")
+
+
+
 ```
 
+### Boxplot 
+Now that the representation of each sex in the data has been observed, let's take a look on the impact of belonging to each sex to obesity.  As  mentioned above, obesity is assessed by measuring weight change in the 5 years after the start of the study. A good way of getting an idea about the variance of the weight between groups and sex is a multiple boxplot of each centre separated by sex.  
+```{r}
+ggplot(datos, aes(x=Centre_f, y=Weight_change_5y, fill=Sex_f)) + 
+    geom_boxplot()
+
+```
+We can see a rather similar shape of the boxes for each centre but with some differences, maybe some subgroups could be deduced from the plot. Maybe, this subgroups respond to different countries:
+
+```{r}
+ggplot(datos, aes(x=Centre_f, y=Weight_change_5y, fill=Country_f)) + 
+    geom_boxplot()
+
+```
+
+Except for countries 7 and 8, it seems that the boxes of each country are quite similar. Nevertheless, if precission is what concerns us most, using centre variable insted of country will allways explain more variability, thus improving performance.  
 
 
-Because of the nature of the project, some undesired external variability may be introduced to the data.
-Therefore the variables Sex, Age and centre will be treated as covariates in our model in order to improve accuracy.
-Since each centre collected data in a singular way, some centre-specific variance may be introduced to our data. 
-In order asses this effect, the three following models with different degree of interaction are proposed:
+There are a lot of outliers but they are symetrical , as well as a centered mean arround 0. This suggests a normal distribution of weight in the different centres. There doesn't appear to be great differences in weight loss/gain between sexs, since the quantile boxes present very similar structures  and means. 
+In my opinion the most interesting fact we can extract from this plot is that the mean values seem to be a little bit displaced over or below 0 for each centre. This could be explained by center specific bias, maybe introduced by scale calibration errors, that may produce this fluctuations between centres. Of course, there are many other explanations, such as cultural tendency to lie about personal sensible data such as weight or other factors concerning the specific workflow of each Centre / Country.
+
+In any case this variance suggests using a *mixed multilevel linear regression with fixed effect on region*.
+
+**A check on the real effect of sex to our data shall be statistically assessed with a chi-squared test comparing the model precision with or without sex.**   
+
+ 
+
+## Age:
+
+
+The second variable proposed as counfounder is Age. 
+Weight loss/gain is often related to specific stages of the life cycle. For instance, women tend to experience weight gain when entering the menopause. Also weight losses are common when approaching the final stages of life cycle.
+Therefore, I propose to treat age as a Categorical variable.
+
+
+## Centre:
+
+This may be the most difficult confounding variable to adress.
+As previously proposed, there may be some variability introduced by the effects of events occurring on a specific centre. This centre-specific effects can either be fixed such as those observed in the weight bias of each centre or with rendom effects underlying the relationship between weight change and polifenol intake.
+
+In order to asses this effect, the three following models with different degree of interaction in the Centre variable are proposed:
 
 -Model1: Simple regression model with (Age, Sex and centre) as confounding variables. This model doesn't consider within-group variance in the centre variable. 
 
--Model2: Multilevel mixed model with different intercepts for each centre  +Age +Sex. This model takes into account within-group variance in the centre variable, in the following way:
+-Model2: Multilevel mixed model with fixed effect (different intercepts) for each centre  +Age +Sex. This model takes into account within-group variance in the centre variable, in the following way:
 Imagine that the scale each centre uses to measure weights is biased. This would result in slightly different measures for each centre either higher than they should be or lower. Therefore, although the mean value (Intercept) may move, the relation between weight gain/loss and polifenol intake (Slope) should stay the same.  
 
 -Model3: Multilevel mixed model with random effect for centre + Age + Sex. This model proposes that the relation between 5 year weight change and total polifenol intake may change between centers. Remind that we are talking about **TOTAL polifenol**, which is a composition of different groups of polifenols. The relation of each group of polifenols inside the class may vary from centre to centre, since the diet changes from one place to another. Thus, its effect on weight change. 
@@ -139,18 +224,16 @@ Imagine that the scale each centre uses to measure weights is biased. This would
 In first place, lets take a look to our data:
 
 
-
-
-a scatter plot of 5y weight change vs total intake of polifeol wi 
+A scatter plot of 5y weight change vs total intake of polifeol for each centre is a good start:
 
 ```{r, fig.width=7,fig.height=70}
 #png(filename="plot.png", width=600, height=600)
 
 region_plot <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point(size=0.2) + facet_grid(rows=vars(Centre_f),cols=vars(Sex_f),scales="free") + geom_smooth(method="lm",colour="black")
-
+region_plot
 #region_plot <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point() + facet_wrap(~Centre_f) + geom_smooth(method="lm",colour="black")
 
-region_plot
+
 #gt= ggplot_gtable(ggplot_build(region_plot))
 #gt$widths[5] = 4 * gt$widths[5]
 #gt$widths
@@ -161,8 +244,25 @@ region_plot
 #grid.draw(gt)
 #dev.off()
 ```
+There doesn't seem to exists a clear relation between polifenol intake and weight change. In general, a cloud of dots is drawn arround 0 value with no clear tendency. Nevertheless, a closer look should be taken to the line of dots near the -20 value that appears recursively. Centre 34 is a good example of this phenomenon.
 
 
+
+```{r}
+centre34 <- data.frame(datos[datos$Centre_f==34,c("pp025","Weight_change_5y","Sex_f")])
+region_plot.34 <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=centre34) + geom_point(size=0.2)  + geom_smooth(method="lm",colour="black")
+region_plot.34
+
+```
+I would make the following educated guess about this phenomenon:
+Data has been normalized giving missing data a 0 value, thus when normalizing this results in a negative high value. Best way is to exclude missing data or, in any case, assign the mean value.
+
+
+
+
+```{r}
+centre34[,sort(centre34$pp025)]
+```
 
 
 If we want to add the diffrent regression lines of the 3 different models to our multiplot we must first calculate and store these lines and their CI.
@@ -171,9 +271,9 @@ If we want to add the diffrent regression lines of the 3 different models to our
 
 
 ```{r, fig.width=7,fig.height=70}
-region_plot <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point(size=0.2) + facet_grid(rows=vars(Centre_f),cols=vars(Sex_f),scales="free") + geom_abline(aes(data.frame(coef$Mod1)))
+#region_plot <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point(size=0.2) + facet_grid(rows=vars(Centre_f),cols=vars(Sex_f),scales="free") + geom_abline(aes(data.frame(coef$Mod1)))
 
-region_plot
+#region_plot
 ```
 
 
@@ -181,4 +281,5 @@ region_plot
 ```{r}
 #influencePlot(Mod1)
 ```
+
 
