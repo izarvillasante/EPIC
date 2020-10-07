@@ -52,20 +52,34 @@ Sys.setlocale("LC_TIME", "C")
 ```
 
 ```{r paquetes, include=FALSE}
-if(!(require(faraway))) install.packages("faraway")
-if(!(require(devtools))) install.packages("devtools")
-if(!(require(lmerTest))) install.packages("lmerTest")
+
+
+#Install & Load packages for plots:
 if(!(require(ggplot2))) install.packages("ggplot2")
 if(!(require(ggpubr)))install.packages("ggpubr")
 if(!(require(grid)))install.packages("grid")
 if(!(require(gtable)))install.packages("gtable")
- 
+if(!(require(gtable)))install.packages("plot3D")
+
+#Install & Load packages for multiple regression:
+if(!(require(lme4)))install.packages("lme4")
+if(!(require(lmerTest)))install.packages("lmerTest")
+if(!(require(extraoperators)))install.packages("extraoperators")
+if(!(require(multilevelTools)))install.packages("multilevelTools")
+
+#Install devtools with "make" in order to compile packages from binaries, ex: from github.
+if(!(require(devtools))) install.packages("devtools")
+
+#Example of package installation specifying repository:
 if(!(require(printr))) {
   install.packages(
     'printr',
     type = 'source',
     repos = c('http://yihui.name/xran', 'http://cran.rstudio.com')
   )
+devtools::install_github("AckerDWM/gg3D")
+
+library("gg3D")
 }
 ```
 
@@ -127,7 +141,8 @@ In this case, we will treat biological sex as a binary variable with the values 
 ```{r}
 levels(datos$Sex_f)<-c("Male","Female")
 str(datos$Sex_f)
-
+levels(datos$Country_f) <- c("France","Italy","Spain","UK","Netherlands","Greece","Germany","Sweden","Denmark","Norway")
+str(datos$Country_f)
 ```
 
 
@@ -206,6 +221,25 @@ The second variable proposed as counfounder is Age.
 Weight loss/gain is often related to specific stages of the life cycle. For instance, women tend to experience weight gain when entering the menopause. Also weight losses are common when approaching the final stages of life cycle.
 Therefore, I propose to treat age as a Categorical variable.
 
+```{r}
+hist(datos$Age_Recr)
+```
+The distribution of the population is concentrated between 40 and 65 years. I would suggest a first aproximantion with the following groups:
+
+* Under 40
+* Between 40 and 50
+* Between 50 and 60
+* Between 60 and 70
+* Above 70
+
+```{r}
+datos$Age <- cut_interval(datos$Age_Recr,n=5 ) #Creates sequence from 
+levels(datos$Age) #
+
+head(datos$Age)
+#groups <- factor(datos$Age_Recr<=40, levels= c(0:40,41),labels=c("-40","40-50","50-60","60-70","+70"))
+#groups
+```
 
 ## Centre:
 
@@ -227,22 +261,10 @@ In first place, lets take a look to our data:
 A scatter plot of 5y weight change vs total intake of polifeol for each centre is a good start:
 
 ```{r, fig.width=7,fig.height=70}
-#png(filename="plot.png", width=600, height=600)
 
 region_plot <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point(size=0.2) + facet_grid(rows=vars(Centre_f),cols=vars(Sex_f),scales="free") + geom_smooth(method="lm",colour="black")
 region_plot
-#region_plot <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point() + facet_wrap(~Centre_f) + geom_smooth(method="lm",colour="black")
 
-
-#gt= ggplot_gtable(ggplot_build(region_plot))
-#gt$widths[5] = 4 * gt$widths[5]
-#gt$widths
-#gt$heights = gt$heights*10
-
-#gtable_show_layout(gt)
-#gt$widths[5] = 10*gt$widths[5]
-#grid.draw(gt)
-#dev.off()
 ```
 There doesn't seem to exists a clear relation between polifenol intake and weight change. In general, a cloud of dots is drawn arround 0 value with no clear tendency. Nevertheless, a closer look should be taken to the line of dots near the -20 value that appears recursively. Centre 34 is a good example of this phenomenon.
 
@@ -250,30 +272,210 @@ There doesn't seem to exists a clear relation between polifenol intake and weigh
 
 ```{r}
 centre34 <- data.frame(datos[datos$Centre_f==34,c("pp025","Weight_change_5y","Sex_f")])
-region_plot.34 <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=centre34) + geom_point(size=0.2)  + geom_smooth(method="lm",colour="black")
+region_plot.34 <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=centre34) + geom_point(size=2)  + geom_smooth(method="lm",colour="black")
 region_plot.34
 
 ```
-I would make the following educated guess about this phenomenon:
-Data has been normalized giving missing data a 0 value, thus when normalizing this results in a negative high value. Best way is to exclude missing data or, in any case, assign the mean value.
+I would make the following educated guess about this phenomenon; the strange pattern observed in the left of the plot can be dur to:
+*1. Data normalization: Data has been normalized, missing data or not consumers had a 0 value, which in a certain scale can result far away from standar deviation
+- Solutions: If quantiles are used in a semi-continius way this is avoided. Also, adding a small value to all our data will correct this error, usually one magnitude order below the minimum. 
+
+ **If it is because of missing values we should exclude this participants, since their exposure to polifenol is unknown and could be any value.** 
+Another option is to separate 0 values as a control group.
+
+# Models:
+
+Just for instructive reasons, the needed libraries for the multilevel regressions and diagnostics will be loaded in the following chunk. Remember all the libraries where installed and loaded at the start of the report. 
+
+```{r}
+#The main package containing lmer function to call the regression:
+library(lme4)  
+
+#Packages for model diagnostics:
+library(lmerTest)
+library(extraoperators)
+library(multilevelTools)
+```
+
+## Model 1: Simple linear regression:
+
+This model will follow the structure of a simple regresion using the LSE:
+
+y = 1 + x + C_i
+
+* lmer: The call to the simple linear regression model formula.
+* y: The dependent variable,  which we want to predict with our model.
+* Pred: The predictors or covariates that we use in our model to predict y.
+* 1: The Intercept. The value of y when predictors are 0. Also the position where the regression crosses or "Intercepts" the y-axis. There is no need to include it in our formula since it is already implicit.
+* Cov_i: The other covariates that are not grouped.
+* Grouping: The variable used to make grouping.
+
+```{r}
+Mod1 <- lm( Weight_change_5y ~ pp025 + Age_Recr + Sex_f + Centre_f,data = datos)
+summary(Mod1)
+
+```
+```{r}
+#Just to demonstrate that implicitly including the intercept term in our formula results in the same outcome:
+Mod1_I<- lm( Weight_change_5y ~ 1 +pp025 + Age_Recr + Sex_f + Centre_f,data = datos)
+summary(Mod1_I)
+
+#WE can check in the following way:
+coef(Mod1)==coef(Mod1_I)
+```
+
+
+The R^2 here is very low, this means that the accuracy of the model is terrible. 
+
+In other words, the model fails to adjust propoerly to our data. A lot of error is present in the residuals which we can plot in the following way:
+
+```{r}
+Mod1_diagnostics <- plot(Mod1)
+Mod1[1]
+```
+
+
+
+There could exist a problem of multicolineality between variables. This means that the different predicotr variables are intercorrelated, or that they explain the same variance:
+
+```{r}
+car::vif(Mod1)
+
+```
+A value of 10 or more tells us that multicollinearity exist. In that case a method to select variables shall be used. In this case, it seems that the poor performance of the model is not due to multicolinarity between variables. 
+
+Just to clarify the concept of multicolinearity we will give the following example of intercorrelated variables:
+If the variable country was added, one would expect to see collinearity with the Centre variable, since Centre is a subcategory inside Country, thus, the variability of each centre can be seen individually or combined inside each country. Let's check it out:
+
+```{r}
+Mod1_centre_country <- lm( Weight_change_5y ~ pp025 + Age_Recr + Sex_f + Centre_f + Country_f,data = datos)
+#car::vif(Mod1_centre_country)
+#<Error in vif.default(Mod1_centre_country) : there are aliased coefficients in the model
+
+```
+This means that there is perfect multicolinearity, which in turn means that two or more variables are linearly dependent. In other words, the variance in some variables is explained also by other variables. Let's check it:
+
+```{r}
+alias(Mod1_centre_country)
+```
+The output here is telling us that the variance explained by each country is the sum of variance explained by each centre. So, for 
+
+
+```{r}
+Mod1_country <- lm( Weight_change_5y ~ pp025 + Age_Recr + Sex_f +  Country_f,data = datos)
+summary(Mod1_country)
+```
+
+
+## Model 2: Mixed linear regression with fixed effect:
+
+```{r}
+Mod2 <- lmer( Weight_change_5y ~ pp025 + Age_Recr + Sex_f + (1| Centre_f), datos)
+summary(Mod2)
+
+
+```
+
+
+## Model 3: Mixed linear regression with random effect: 
+
+The formula: `lmer(y ~ Pred + Cov_i + ( 1 + Pred | grouping)` Describes a model that corrects for random effects in the predictor variable. Let's stripe it down:
+
+* lmer: The call to the multilevel regression formula provided by lme4 package.
+* y: The dependent variable,  which we want to predict with our model.
+* Pred: The predictors or covariates that we use in our model to predict y.
+* 1: The Intercept. The value of y when predictors are 0. Also the position where the regression crosses or "Intercepts" the y-axis.
+* Cov_i: The other covariates that are not grouped.
+* Grouping: The variable used to make grouping.
+
+As can be deduced from the above formula, the grouping ( 1 + Pred | grouping) affects both the intercept and the Predictor variable. Therefore, a new coefficient or slope is fitted for every group as well as the intercept. Remember that regression applyes the LSE function in order to minimize standard error produced by all the data points. In this case, every set of data inside grouping is evaluated separately, which results in different slopes for every group.
 
 
 
 
 ```{r}
-centre34[,sort(centre34$pp025)]
+Mod3 <- lmer( Weight_change_5y ~ pp025 + Age_Recr + Sex_f + (1 + pp025 | Centre_f), datos )
+summary(Mod3)
+```
+
+```{r fig.width=7,fig.height=70}
+
+region_plot_Mod1 <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point(size=0.2) + facet_grid(rows=vars(Centre_f),cols=vars(Sex_f),scales="free") + geom_line(aes(y = predict(Mod1), colour= "var0")) +
+geom_line(aes(y = predict(Mod2), colour= "var1")) +
+  geom_line(aes(y = predict(Mod3), colour= "var2")) + geom_smooth(method="lm",colour="black")
+region_plot_Mod1
+
+```
+
+Just to take a look to the data in a 3D fashion:
+R repository don't include any library for 3D plotting but we can install 3rd-party libraries from github using Rtools:
+```{r}
+devtools::install_github("AckerDWM/gg3D")
+library("gg3D")
+
 ```
 
 
-If we want to add the diffrent regression lines of the 3 different models to our multiplot we must first calculate and store these lines and their CI.
+```{r}
 
-1.
+x <- datos$pp025
+y <- datos$Weight_change_5y
+z <- datos$Age_Recr
+fit <- Mod1
+
+# predict values on regular xy grid
+grid.lines = 26
+x.pred <- seq(min(datos$pp025), max(datos$pp025), length.out = grid.lines)
+y.pred <- seq(min(datos$Weight_change_5y), max(datos$Age_Recr), length.out = grid.lines)
+xyz <- expand.grid(pp025 = x.pred, Age_Recr = y.pred, Sex_f="Female",Centre_f="11")
+z.pred <- matrix(predict(Mod1, newdata = xyz), nrow = grid.lines, ncol = grid.lines)
+# fitted points for droplines to surface 
+fitpoints <- predict(Mod1)
+
+# scatter plot with regression plane
+b <- plot3D::scatter3D( 
+  x=datos$pp025,
+  y=datos$Weight_change_5y,
+  z=datos$Age_Recr,
+  bty = "g",
+  
+  col.var = as.integer(datos$Sex_f),
+  col = c(params$men_color, params$women_color),
+  ticktype = "detailed",
+  main ="3d",
+  xlab = "polifenol", ylab = "Weight change", zlab = "Age",
+  addlines = TRUE, length = 0.5, width = 0.5,
+  labels = c("Male","Female") ,
+  surf = list(x = x.pred, y = y.pred, z = z.pred,  facets = NA, fit = fitpoints) 
+)
+# scatter plot with regression plane
+    #scatter3D(x, y, z, pch = 18, cex = 2, 
+    #theta = 20, phi = 20, ticktype = "detailed",
+    #xlab = "wt", ylab = "disp", zlab = "mpg",  
+    #surf = list(x = x.pred, y = y.pred, z = z.pred,  
+    #facets = NA, fit = fitpoints)
+#)
+b
+
+```
 
 
 ```{r, fig.width=7,fig.height=70}
-#region_plot <- ggplot(aes(x=pp025,y=Weight_change_5y, colour=factor(Sex_f)),data=datos) + geom_point(size=0.2) + facet_grid(rows=vars(Centre_f),cols=vars(Sex_f),scales="free") + geom_abline(aes(data.frame(coef$Mod1)))
 
-#region_plot
+region_plot_Mod3_3d <- ggplot(data=datos, aes(x=pp025,y=Weight_change_5y, z=Age_Recr,colour=factor(Sex_f)))  + 
+  axes_3D() + 
+  stat_3D() +  
+  facet_grid(rows=vars(Centre_f),cols=vars(Sex_f)) 
+
+
+
+#region_plot_Mod3_3d <- ggplot(data=datos, aes(x=pp025,y=Weight_change_5y, z=Age_Recr,colour=factor(Sex_f)))  + axes_3D() + stat_3D() +  facet_grid(rows=vars(Centre_f),cols=vars(Sex_f),scales="free") + geom_line(aes(y = predict(Mod1), colour= "var0")) +geom_line(aes(y = predict(Mod2), colour= "var1")) +  geom_line(aes(y = predict(Mod3), colour= "var2"))  
+
+
+
+#region_plot_3d <- ggplot(aes(x=pp025,y=Weight_change_5y,z=Age_f colour=factor(Sex_f)),data=datos) + geom_point(size=0.2) + facet_grid(rows=vars(Centre_f),cols=vars(Sex_f),scales="free") + geom_abline(aes(data.frame(coef$Mod1)))
+
+region_plot_Mod3_3d
 ```
 
 
