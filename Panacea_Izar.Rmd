@@ -105,12 +105,49 @@ if(!exists("main_db")){
 It is a very big dataset, let's take a quick look:
 ```{r}
 dim(main_db)
+pryr::object_size(main_db)
 ```
-A total of 349165 participants from the "Epic-Panacea" project with consumption data of polifenols.
+A total of 349165 participants from the "Epic-Panacea" project with consumption data of polifenols. A big dataset of 1.78GB
 A total of 628 colums containing polifenol intake and other information that can be grouped as follows:
 
-1. 
-2.
+1. The first step is to convert the dataframe into a data.table. In order to make faster ops and easier to work. And most important save us RAM.
+```{r}
+library(data.table)
+tbl<-setDT(main_db)
+```
+
+
+2. Now lets separate the columns containing general info such as Age, weight, etc. From the columns containing polifenols:
+
+```{r}
+general <- tbl[, .SD, .SDcols = c(1:3,490:555)]
+str(general)
+
+```
+
+```{r}
+sas.factor <- lapply(general,exists(attributes(X)$format.sas))
+tst[,(cols):=lapply(.SD, as.factor),.SDcols=cols]
+```
+
+
+
+
+Let's have a look to the different variables.
+```{r}
+library(ggplot2)
+p <- ggplot(melt(general), aes(factor(variable), value)) 
+p + geom_boxplot() + facet_wrap(~variable, scale="free")
+wa
+```
+
+
+```{r}
+polifenols <- tbl[, .SD, .SDcols = 4:422]
+
+```
+
+
 3. [423:459] From column 423 to 459 we have 37 main subclasses of polifenols:
 
 ```{r}
@@ -263,15 +300,35 @@ factor(Hmisc::cut2(main_db$Anthocyanins, g=5,m=5,minmax=T,include.lowest = TRUE)
 ```{r}
 #factor(Hmisc::cut2(main_db$Theaflavins, g = 4), labels = c(1:4))
 
-quintile <- function(x) factor(Hmisc::cut2(x, g=5,exclude=0),labels = F)
+quintile <- function(x) factor(Hmisc::cut2(x,g=5,exclude=0,labels=c(1:4)))
 
-PP_quintile <- data.frame(apply(main_db[,PP_subclass],2,quintile))
-str(PP_quintile)
+PP_quintile <- data.table(apply(main_db[,PP_subclass],2,quintile))
+#str(PP_quintile)
+```
+```{r}
+library(data.table)
+dtsetDT(PP_quintile)
+PP_quintile[.SD , quartile := floor( 1 + 4 * (.I-1) / .N)]
 ```
 
 
 
-6.
+6.Separate all polifenols:
+
+```{r}
+polifenoles <- datos[,4:422]
+```
+
+We are going to normalize the polifenols using different transformations
+
+ 1.- Logaritmic transformation:
+Logaritms need a gamma coefficient in order to deal with 0. In order to choose this value we are going to check wich is the smallest value in all the dataset
+
+
+```{r}
+min(polifenoles[polifenoles != 0])
+which.min(polifenoles[polifenoles != 0],polifenoles != 0)
+```
 
 
 ## Data preparation:
