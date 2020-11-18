@@ -1,0 +1,179 @@
+---
+title: "Dietary polyphenol and obesity markers. Translational research"
+author: "Izar de Villasante, Brainvitge"
+date: '`r format(Sys.Date(),"%e de %B, %Y")`'
+#runtime: shiny
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: 3
+  word_document:
+    toc: yes
+    toc_depth: '3'
+  pdf_document:
+    keep_tex: yes
+    toc: yes
+    toc_depth: 3
+params:
+  
+  
+  
+  
+  main_folder: !r getwd()
+  #/home/izar/notebooks/
+  
+  men_color: "aquamarine"  #hcl(h=60,c=100,l=65) 
+  women_color: "indianred1"      #hcl(h=15,c=100,l=65) #"#ED813E" # 
+  results: ./Results
+  Datasets: ./Datasets
+  mercedes: "EPIC.PANACEA_log2_factors" 
+  excel_local: "Local_Measures.xlsx"
+  variables: [vol]
+    
+header-includes: 
+  - \usepackage{bbm}
+  - \usepackage[spanish]{babel}
+---
+\newline
+\newline
+
+---
+
+```{r setup, include=FALSE}
+require(knitr)
+#rmarkdown::render("panacea.Rmd", params = "ask")
+
+# include this code chunk as-is to set options
+opts_chunk$set(comment = NA, prompt = TRUE, tidy = FALSE, 
+               fig.width = 10, fig.height = 10,echo = TRUE, 
+               message = FALSE, warning = FALSE, cache=FALSE)
+Sys.setlocale("LC_TIME", "C")
+```
+
+```{r paquetes, include=FALSE}
+if(!(require(faraway))) install.packages("faraway")
+if(!(require(devtools))) install.packages("devtools")
+if(!(require(lmerTest))) install.packages("lmerTest")
+if(!(require(ggplot2))) install.packages("ggplot2")
+if(!(require(ggpubr)))install.packages("ggpubr")
+if(!(require(grid)))install.packages("grid")
+if(!(require(gtable)))install.packages("gtable")
+if(!(require(magrittr)))install.packages("magrittr")
+
+if(!(require(dplyr)))install.packages("dplyr")
+ 
+if(!(require(printr))) {
+  install.packages(
+    'printr',
+    type = 'source',
+    repos = c('http://yihui.name/xran', 'http://cran.rstudio.com')
+  )
+}
+```
+
+# Contexto del Proyecto:
+
+El objetivo principal del estudio es evaluar la asociación entre la exposición de polifenoles y los marcadores de obesidad e investigar su efecto sobre los parámetros de salud y la pérdida ponderal en un tratamiento de adelgazamiento. El proyecto consta de tres fases: i) evaluación de la exposición de polifenoles, medidos mediante cuestionarios de dieta, biomarcadores o la combinación de ambas medidas, y el cambio de peso y perímetro de cintura en un gran estudio epidemiológico observacional: EPIC-PANACEA, que incluye ~370000 adultos provenientes de 10 países europeos, con un seguimiento de 2 a 11 años.
+
+*The main objective is to evaluate the association between polyphenol exposure and obesity markers and to investigate their effect on several health markers and the body weight composition in a weight loss treatment. The Project is divided in 3 stages: i) Firstly, to evaluate the association between the exposure of polyphenols, assessed using dietary questionnaires, biomarkers or the combination of both methods, and the change in body weight and waist circumference in a large observational study: the EPIC-PANACEA. It consists in ~370000 adult men and women from ten European countries with a follow-up ranged from 2 to 11 years.*
+
+
+```{r load data}
+#First save current working directory:
+cwd <- getwd()
+#Load Datasets folder:
+datasets <- paste(cwd,"Datasets/",sep="/")
+
+#Load each file:
+
+file1 <- "bdpanacea_reduced.txt"
+file2 <- "EPIC.PANACEA_log2_factors.txt"
+
+
+
+#reduced <- read.table("Z:/Rstudio/EPIC/bdpanacea_reduced.txt", quote="\"", comment.char="")
+if(!exists("datos")){
+  datos <- read.table(paste0(datasets,file2), quote="\"", comment.char="")
+}
+```
+
+```{r}
+
+datos[12:21]<-lapply(datos[12:21],function(x) {as.factor(x)})
+
+levels(datos$Sex_f)<-c("Male","Female")
+str(datos$Sex_f)
+
+levels(datos$Country_f) <- c("France","Italy","Spain","UK","Netherlands","Greece","Germany","Sweden","Denmark","Norway")
+str(datos$Country_f)
+str(datos, list.len=30)
+
+
+```
+
+```{r}
+library(leaps)
+datos_main <- datos[,c("Age_Recr","Weight_change_5y", "Country_f","Sex_f")]
+datos_poli<-datos[,23:ncol(datos)]
+sub_datos <- cbind(datos_main,datos_poli)
+#b <- regsubsets(Weight_change_5y ~ ., data =sub_datos,really.big = T )
+
+```
+
+```{r}
+#rs <- summary(b)
+#rs$which
+
+#plot(1:9,rs$adjr2,xlab="No. of Parameters",ylab="Adjusted R-square")
+
+```
+
+```{r}
+#best_sub <- which.max(rs$adjr2)
+#which(rs$which[best_sub,])
+```
+
+There is a wise option which would be to make a best subsets forcing all covariates (Region, sex, age) to be included. in this case we will set the maximum size of the model to 12:
+
+```{r}
+#b2 <- regsubsets(Weight_change_5y ~ ., 
+#                 data =sub_datos,
+#                 really.big = T ,
+#                 force.in = c(1,3,4),
+#                 nvmax=12)
+
+b2 <- 
+```
+```{r}
+rs <- summary(b2)
+rs$which
+plot(1:length(rs$adjr2),rs$adjr2,xlab="No. of Parameters",ylab="Adjusted R-square")
+
+```
+
+
+
+
+```{r}
+require(magrittr)
+require(dplyr)
+r2_out <- rs$outmat[,which(apply(rs$outmat,2,function(r) any(r %in% "*")))]
+
+```
+
+
+
+```{r}
+
+best_sub <- which.max(rs$adjr2)
+y<-rs$which[best_sub,]
+rs$outmat[,which(y)]
+
+```
+
+```{r}
+saveRDS(b2, file="Bestsubsets12_with_covariates.RDS")
+```
+
+

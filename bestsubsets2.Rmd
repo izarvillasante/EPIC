@@ -1,0 +1,181 @@
+---
+title: "Dietary polyphenol and obesity markers. Translational research"
+author: "Izar de Villasante, Brainvitge"
+date: '`r format(Sys.Date(),"%e de %B, %Y")`'
+#runtime: shiny
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: 3
+  word_document:
+    toc: yes
+    toc_depth: '3'
+  pdf_document:
+    keep_tex: yes
+    toc: yes
+    toc_depth: 3
+params:
+  
+  
+  
+  
+  main_folder: !r getwd()
+  #/home/izar/notebooks/
+  
+  men_color: "aquamarine"  #hcl(h=60,c=100,l=65) 
+  women_color: "indianred1"      #hcl(h=15,c=100,l=65) #"#ED813E" # 
+  results: ./Results
+  Datasets: ./Datasets
+  mercedes: "EPIC.PANACEA_log2_factors" 
+  excel_local: "Local_Measures.xlsx"
+  variables: [vol]
+    
+header-includes: 
+  - \usepackage{bbm}
+  - \usepackage[spanish]{babel}
+---
+\newline
+\newline
+
+---
+
+```{r setup, include=FALSE}
+require(knitr)
+#rmarkdown::render("panacea.Rmd", params = "ask")
+
+# include this code chunk as-is to set options
+opts_chunk$set(comment = NA, prompt = TRUE, tidy = FALSE, 
+               fig.width = 10, fig.height = 10,echo = TRUE, 
+               message = FALSE, warning = FALSE, cache=FALSE)
+Sys.setlocale("LC_TIME", "C")
+```
+
+```{r paquetes, include=FALSE}
+if(!(require(faraway))) install.packages("faraway")
+if(!(require(devtools))) install.packages("devtools")
+if(!(require(lmerTest))) install.packages("lmerTest")
+if(!(require(ggplot2))) install.packages("ggplot2")
+if(!(require(ggpubr)))install.packages("ggpubr")
+if(!(require(grid)))install.packages("grid")
+if(!(require(gtable)))install.packages("gtable")
+if(!(require(magrittr)))install.packages("magrittr")
+
+if(!(require(dplyr)))install.packages("dplyr")
+ 
+if(!(require(printr))) {
+  install.packages(
+    'printr',
+    type = 'source',
+    repos = c('http://yihui.name/xran', 'http://cran.rstudio.com')
+  )
+}
+```
+
+# Contexto del Proyecto:
+
+El objetivo principal del estudio es evaluar la asociación entre la exposición de polifenoles y los marcadores de obesidad e investigar su efecto sobre los parámetros de salud y la pérdida ponderal en un tratamiento de adelgazamiento. El proyecto consta de tres fases: i) evaluación de la exposición de polifenoles, medidos mediante cuestionarios de dieta, biomarcadores o la combinación de ambas medidas, y el cambio de peso y perímetro de cintura en un gran estudio epidemiológico observacional: EPIC-PANACEA, que incluye ~370000 adultos provenientes de 10 países europeos, con un seguimiento de 2 a 11 años.
+
+*The main objective is to evaluate the association between polyphenol exposure and obesity markers and to investigate their effect on several health markers and the body weight composition in a weight loss treatment. The Project is divided in 3 stages: i) Firstly, to evaluate the association between the exposure of polyphenols, assessed using dietary questionnaires, biomarkers or the combination of both methods, and the change in body weight and waist circumference in a large observational study: the EPIC-PANACEA. It consists in ~370000 adult men and women from ten European countries with a follow-up ranged from 2 to 11 years.*
+
+
+
+
+In this case a best subsets including the 3 covariates Age, Sex and Region has been performed up to 12 predictors.
+
+```{r load data}
+datos <- readRDS("EPIC.PANACEA_log2_factors.RDS")
+subsets <- readRDS("Bestsubsets12_with_covariates.RDS")
+
+```
+
+
+```{r}
+library(leaps)
+rs <- summary(subsets)
+plot(4:13,rs$adjr2,xlab="No. of Parameters",ylab="Adjusted R-square")
+
+```
+
+
+
+
+```{r}
+require(magrittr)
+require(dplyr)
+r2_out <- rs$outmat[,which(apply(rs$outmat,2,function(r) any(r %in% "*")))]
+r2_out <- cbind(r2_out,r2=round(rs$adjr2,4))
+r2_out
+```
+
+
+```{r}
+coef(subsets,which.max(rs$adjr2))
+paste0("Best model R2:", max(rs$adjr2))
+
+```
+
+
+Another approach is to try a regression without any covariate. Only polifenols:
+
+```{r}
+subsets <- readRDS("Bestsubsets10_polifenol_only.RDS")
+```
+
+
+
+```{r}
+library(leaps)
+rs <- summary(subsets)
+plot(4:13,rs$adjr2,xlab="No. of Parameters",ylab="Adjusted R-square")
+
+```
+
+
+
+
+```{r}
+require(magrittr)
+require(dplyr)
+r2_out <- rs$outmat[,which(apply(rs$outmat,2,function(r) any(r %in% "*")))]
+r2_out <- cbind(r2_out,r2=round(rs$adjr2,4))
+r2_out
+```
+
+
+```{r}
+coef(subsets,which.max(rs$adjr2))
+paste0("Best model R2:", max(rs$adjr2))
+
+```
+
+We can observe some interesting synergies here. Although the best predictor alone is pp638 it doesn't work as well in combination to others. Imediately after the single polifenol, the combo pp639+pp642+pp644 has a good predictive power explaining up to 2,48% of the variance in weight.   Also we see that including pp561 improves the adjustment more than adding pp555 or pp357 alone but less than adding them together. 
+
+I would take a closer look to the model in the 3rd round:
+```{r}
+coef(subsets,3)
+
+```
+```{r}
+polifenol_simple_model <- lm(data=datos,Weight_change_5y ~ pp639+pp642+pp644)
+```
+
+```{r}
+mixed_model <- lme4::lmer(data=datos,Weight_change_5y ~ pp639+pp642+pp644+ Sex_f + Centre_f + Age_Recr+(1|Centre_f))
+summary(mixed_model)
+```
+
+```{r}
+mixed_model_random <- lme4::lmer(data=datos,Weight_change_5y ~ pp639+pp642+pp644+ Sex_f + Centre_f + Age_Recr+(1+pp639+pp642+pp644|Centre_f))
+summary(mixed_model)
+```
+
+
+```{r}
+AIC(polifenol_simple_model,mixed_model,mixed_model_random)
+```
+
+```{r}
+anova(mixed_model,mixed_model_random)
+
+```
